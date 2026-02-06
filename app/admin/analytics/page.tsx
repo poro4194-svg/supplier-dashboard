@@ -6,14 +6,14 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Calendar, Info } from 'lucide-react';
+import type { Offer, Order } from '@/types';
 
 function parseMoney(value: string): number {
-  // supports: "$15.00", "€1,137.35", "2112", "200"
   const cleaned = value
     .replace(/\s/g, '')
     .replace(/[€$]/g, '')
-    .replace(/\./g, '') // remove thousand separators if user uses 1.137,35
-    .replace(',', '.'); // convert decimal comma to dot
+    .replace(/\./g, '')
+    .replace(',', '.');
 
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : 0;
@@ -43,13 +43,34 @@ function toDateInputValue(ts: number) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+/**
+ * ✅ Converts createdAt into a number timestamp
+ * supports:
+ * - number (already timestamp)
+ * - string (ISO date or something parseable by Date)
+ * - undefined (returns null)
+ */
+function toTs(createdAt: unknown): number | null {
+  if (typeof createdAt === 'number' && Number.isFinite(createdAt)) return createdAt;
+
+  if (typeof createdAt === 'string') {
+    const parsed = Date.parse(createdAt);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function inRange(ts: number, start: number, end: number) {
+  return ts >= start && ts <= end;
+}
+
 export default function AdminAnalyticsPage() {
   const { offers, orders } = useAppData();
 
-  // default: last 2 weeks
   const now = Date.now();
   const defaultEnd = endOfDay(now);
-  const defaultStart = startOfDay(now - 13 * 24 * 60 * 60 * 1000); // 14 days window
+  const defaultStart = startOfDay(now - 13 * 24 * 60 * 60 * 1000);
 
   const [rangeStart, setRangeStart] = useState<number>(defaultStart);
   const [rangeEnd, setRangeEnd] = useState<number>(defaultEnd);
@@ -59,36 +80,63 @@ export default function AdminAnalyticsPage() {
   const last24hEnd = now;
 
   const metrics24h = useMemo(() => {
-    const orders24h = orders.filter(o => o.createdAt >= last24hStart && o.createdAt <= last24hEnd);
-    const offers24h = offers.filter(o => o.createdAt >= last24hStart && o.createdAt <= last24hEnd);
+    const orders24h = orders.filter((o: Order) => {
+      const ts = toTs((o as any).createdAt);
+      return ts !== null && inRange(ts, last24hStart, last24hEnd);
+    });
+
+    const offers24h = offers.filter((o: Offer) => {
+      const ts = toTs((o as any).createdAt);
+      return ts !== null && inRange(ts, last24hStart, last24hEnd);
+    });
 
     const ordersCount = orders24h.length;
     const listedOffers = offers24h.length;
 
-    const profit = orders24h.reduce((sum, o) => sum + parseMoney(o.price) * (o.qty ?? 1), 0);
+    const profit = orders24h.reduce(
+      (sum, o) => sum + parseMoney(o.price) * (o.qty ?? 1),
+      0
+    );
 
     return { ordersCount, profit, listedOffers };
   }, [offers, orders, last24hStart, last24hEnd]);
 
   const metricsRange = useMemo(() => {
-    const rOrders = orders.filter(o => o.createdAt >= rangeStart && o.createdAt <= rangeEnd);
-    const rOffers = offers.filter(o => o.createdAt >= rangeStart && o.createdAt <= rangeEnd);
+    const rOrders = orders.filter((o: Order) => {
+      const ts = toTs((o as any).createdAt);
+      return ts !== null && inRange(ts, rangeStart, rangeEnd);
+    });
+
+    const rOffers = offers.filter((o: Offer) => {
+      const ts = toTs((o as any).createdAt);
+      return ts !== null && inRange(ts, rangeStart, rangeEnd);
+    });
 
     const ordersCount = rOrders.length;
     const listedOffers = rOffers.length;
-    const profit = rOrders.reduce((sum, o) => sum + parseMoney(o.price) * (o.qty ?? 1), 0);
+
+    const profit = rOrders.reduce(
+      (sum, o) => sum + parseMoney(o.price) * (o.qty ?? 1),
+      0
+    );
 
     return { ordersCount, profit, listedOffers };
   }, [offers, orders, rangeStart, rangeEnd]);
 
-  // Compare vs previous period (same length) for Total Profits
   const profitDelta = useMemo(() => {
     const len = rangeEnd - rangeStart;
     const prevStart = rangeStart - len;
     const prevEnd = rangeEnd - len;
 
-    const prevOrders = orders.filter(o => o.createdAt >= prevStart && o.createdAt <= prevEnd);
-    const prevProfit = prevOrders.reduce((sum, o) => sum + parseMoney(o.price) * (o.qty ?? 1), 0);
+    const prevOrders = orders.filter((o: Order) => {
+      const ts = toTs((o as any).createdAt);
+      return ts !== null && inRange(ts, prevStart, prevEnd);
+    });
+
+    const prevProfit = prevOrders.reduce(
+      (sum, o) => sum + parseMoney(o.price) * (o.qty ?? 1),
+      0
+    );
 
     const delta = metricsRange.profit - prevProfit;
     const pct = prevProfit > 0 ? (delta / prevProfit) * 100 : null;
@@ -96,16 +144,23 @@ export default function AdminAnalyticsPage() {
     return { delta, pct };
   }, [orders, rangeStart, rangeEnd, metricsRange.profit]);
 
-  const rangeLabel = `${new Date(rangeStart).toLocaleDateString('en-GB', { month: 'short', day: '2-digit', year: 'numeric' })} - ${new Date(rangeEnd).toLocaleDateString('en-GB', { month: 'short', day: '2-digit', year: 'numeric' })}`;
+  const rangeLabel = `${new Date(rangeStart).toLocaleDateString('en-GB', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+  })} - ${new Date(rangeEnd).toLocaleDateString('en-GB', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+  })}`;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <h1 className="text-3xl font-bold text-white">Good evening, Poro</h1>
 
         <div className="relative">
-          <Button variant="secondary" onClick={() => setPickerOpen(v => !v)} className="gap-2">
+          <Button variant="secondary" onClick={() => setPickerOpen((v) => !v)} className="gap-2">
             <Calendar className="w-4 h-4" />
             Select Date Range
             <span className="text-gray-300 ml-2">{rangeLabel}</span>
@@ -130,14 +185,15 @@ export default function AdminAnalyticsPage() {
               </div>
 
               <div className="flex justify-end gap-2 mt-4">
-                <Button variant="ghost" onClick={() => setPickerOpen(false)}>Close</Button>
+                <Button variant="ghost" onClick={() => setPickerOpen(false)}>
+                  Close
+                </Button>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Info badge */}
       <div className="flex justify-end">
         <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-sm text-blue-300">
           <Info className="w-4 h-4" />
@@ -145,7 +201,6 @@ export default function AdminAnalyticsPage() {
         </div>
       </div>
 
-      {/* Last 24h */}
       <Card className="p-0 overflow-hidden border border-gray-800 bg-gray-900">
         <div className="px-6 py-4 text-gray-300 font-medium border-b border-gray-800">Last 24h</div>
         <div className="grid grid-cols-1 md:grid-cols-3">
@@ -164,7 +219,6 @@ export default function AdminAnalyticsPage() {
         </div>
       </Card>
 
-      {/* Total Profits + Orders (selected range) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="p-6 border border-gray-800 bg-gray-900">
           <div className="flex items-start justify-between gap-3">
@@ -179,13 +233,15 @@ export default function AdminAnalyticsPage() {
                   <span className={profitDelta.delta >= 0 ? 'text-green-400' : 'text-red-400'}>
                     {profitDelta.delta >= 0 ? '+' : ''}
                     {formatEUR(profitDelta.delta)} ({profitDelta.pct >= 0 ? '+' : ''}
-                    {profitDelta.pct.toFixed(2)}%) <span className="text-gray-500">Past 2 weeks</span>
+                    {profitDelta.pct.toFixed(2)}%) <span className="text-gray-500">vs previous period</span>
                   </span>
                 )}
               </div>
             </div>
 
-            <Button variant="ghost" className="px-3">...</Button>
+            <Button variant="ghost" className="px-3">
+              ...
+            </Button>
           </div>
         </Card>
 
