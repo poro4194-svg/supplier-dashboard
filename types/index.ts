@@ -14,7 +14,7 @@ export interface Offer {
   price: string;
   stock?: number;
   status: 'Active' | 'Pending' | 'Inactive';
-  createdAt: number; // ✅ timestamp (Date.now())
+  createdAt?: string; // ✅ timestamp (Date.now())
 }
 
 export interface Order {
@@ -25,5 +25,5 @@ export interface Order {
   qty: number;
   price: string;
   status: 'Completed' | 'Processing' | 'Pending';
-  createdAt: number; // ✅ timestamp (Date.now())
+  createdAt?: string; // ✅ timestamp (Date.now())
 }
