@@ -7,13 +7,20 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { CreateOfferModal } from '@/components/CreateOfferModal';
-import { MOCK_OFFERS } from '@/lib/data';
+import { useAppData } from '@/context/AppDataContext';
+import type { OfferCategory } from '@/types';
 
 export default function AdminOffersPage() {
   const params = useParams();
-  const category = params.category as string;
+
+  const raw = params.category;
+  const category = (Array.isArray(raw) ? raw[0] : raw) as OfferCategory;
+
   const formattedCategory = category.charAt(0).toUpperCase() + category.slice(1);
   const [showModal, setShowModal] = useState(false);
+  const { offers, addOffer, addOrder } = useAppData();
+
+  const filteredOffers = offers.filter(o => o.category === category);
 
   return (
     <div className="space-y-6">
@@ -28,38 +35,38 @@ export default function AdminOffersPage() {
         </Button>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-         <Card className="p-4 flex items-center gap-4">
-            <div className="p-3 bg-blue-500/10 rounded-lg text-blue-400">
-              <Package className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Total Active</p>
-              <p className="text-2xl font-bold text-white">1,234</p>
-            </div>
-         </Card>
-         <Card className="p-4 flex items-center gap-4">
-            <div className="p-3 bg-green-500/10 rounded-lg text-green-400">
-              <Coins className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Revenue (Today)</p>
-              <p className="text-2xl font-bold text-white">$845.00</p>
-            </div>
-         </Card>
-         <Card className="p-4 flex items-center gap-4">
-            <div className="p-3 bg-purple-500/10 rounded-lg text-purple-400">
-              <User className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Pending Actions</p>
-              <p className="text-2xl font-bold text-white">12</p>
-            </div>
-         </Card>
+        <Card className="p-4 flex items-center gap-4">
+          <div className="p-3 bg-blue-500/10 rounded-lg text-blue-400">
+            <Package className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Total Active</p>
+            <p className="text-2xl font-bold text-white">1,234</p>
+          </div>
+        </Card>
+
+        <Card className="p-4 flex items-center gap-4">
+          <div className="p-3 bg-green-500/10 rounded-lg text-green-400">
+            <Coins className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Revenue (Today)</p>
+            <p className="text-2xl font-bold text-white">$845.00</p>
+          </div>
+        </Card>
+
+        <Card className="p-4 flex items-center gap-4">
+          <div className="p-3 bg-purple-500/10 rounded-lg text-purple-400">
+            <User className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Pending Actions</p>
+            <p className="text-2xl font-bold text-white">12</p>
+          </div>
+        </Card>
       </div>
 
-      {/* Table */}
       <div className="overflow-hidden rounded-xl border border-gray-800 bg-gray-900 shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -73,7 +80,7 @@ export default function AdminOffersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800">
-              {MOCK_OFFERS.map((row) => (
+              {filteredOffers.map((row) => (
                 <tr key={row.id} className="hover:bg-gray-800/50 transition-colors">
                   <td className="px-6 py-4 text-gray-300">{row.game}</td>
                   <td className="px-6 py-4 text-gray-300">{row.product}</td>
@@ -88,11 +95,29 @@ export default function AdminOffersPage() {
           </table>
         </div>
       </div>
-      
+
       {showModal && (
-        <CreateOfferModal 
-          category={formattedCategory} 
-          onClose={() => setShowModal(false)} 
+        <CreateOfferModal
+          category={category} // ✅ OVO JE FIX
+          onClose={() => setShowModal(false)}
+          onCreate={({ game, product, price }: { game: string; product: string; price: string }) => {
+            addOffer({
+              category,
+              game,
+              product,
+              price,
+              status: 'Active',
+            });
+
+            addOrder({
+              category,
+              game,
+              product,
+              qty: 1,
+              price,
+              status: 'Pending',
+            });
+          }}
         />
       )}
     </div>

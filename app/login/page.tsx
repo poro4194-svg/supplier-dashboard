@@ -68,12 +68,6 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Signing in...' : 'Sign In'}
             </Button>
-            
-            <div className="text-center text-xs text-gray-500 mt-4">
-              <p>Demo Credentials:</p>
-              <p>Admin: admin / admin</p>
-              <p>Supplier: ffin / ffin</p>
-            </div>
           </form>
         </Card>
       </div>

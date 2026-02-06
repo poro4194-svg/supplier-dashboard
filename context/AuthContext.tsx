@@ -19,49 +19,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  // 1. Load user from localStorage on mount
   useEffect(() => {
-    // Check local storage on mount
-    const stored = localStorage.getItem('user');
-    if (stored) {
-      setUser(JSON.parse(stored));
-    }
-    setIsLoading(false);
+    const initAuth = () => {
+      try {
+        const stored = localStorage.getItem('user');
+        if (stored) {
+          setUser(JSON.parse(stored));
+        }
+      } catch (error) {
+        console.error("Auth initialization error:", error);
+        localStorage.removeItem('user');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    initAuth();
   }, []);
 
+  // 2. Protect Routes
   useEffect(() => {
     if (isLoading) return;
 
     const isAuthPage = pathname === '/login';
-    
-    if (!user && !isAuthPage) {
-      router.push('/login');
+    const isRootPage = pathname === '/';
+
+    // CASE A: User is NOT logged in
+    if (!user) {
+      // If they are on a protected page (not login), send them to login
+      if (!isAuthPage) {
+        router.replace('/login');
+      }
+      return; // Stop execution here
     }
 
-    if (user) {
-      if (isAuthPage || pathname === '/') {
-        router.push(user.role === 'admin' ? '/admin/offers/account' : '/supplier/orders/account');
-      }
-      
-      // Role protection
-      if (user.role === 'admin' && pathname.startsWith('/supplier')) {
-        router.push('/admin/offers/account');
-      }
-      if (user.role === 'supplier' && pathname.startsWith('/admin')) {
-        router.push('/supplier/orders/account');
-      }
+    // CASE B: User IS logged in
+    const adminHome = '/admin/offers/account';
+    const supplierHome = '/supplier/orders/account';
+    const targetHome = user.role === 'admin' ? adminHome : supplierHome;
+
+    // 1. Redirect from Public pages (Login/Root) to Dashboard
+    if (isAuthPage || isRootPage) {
+      // We don't need to check "if (pathname !== home)" because we know 
+      // pathname is currently '/login' or '/', so it definitely isn't home.
+      router.replace(targetHome);
+      return;
     }
+
+    // 2. Role-based Protection (prevent cross-role access)
+    if (user.role === 'admin' && pathname.startsWith('/supplier')) {
+      router.replace(adminHome);
+      return;
+    }
+
+    if (user.role === 'supplier' && pathname.startsWith('/admin')) {
+      router.replace(supplierHome);
+      return;
+    }
+
   }, [user, isLoading, pathname, router]);
 
   const login = (userData: User) => {
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
-    router.push(userData.role === 'admin' ? '/admin/offers/account' : '/supplier/orders/account');
+    router.replace(userData.role === 'admin' ? '/admin/offers/account' : '/supplier/orders/account');
   };
 
   const logout = () => {
     localStorage.removeItem('user');
     setUser(null);
-    router.push('/login');
+    router.replace('/login');
   };
 
   return (

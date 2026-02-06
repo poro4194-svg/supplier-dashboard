@@ -5,12 +5,15 @@ import { useParams } from 'next/navigation';
 import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { MOCK_ORDERS } from '@/lib/data';
+import { useAppData } from '@/context/AppDataContext';
+
 
 export default function SupplierOrdersPage() {
   const params = useParams();
   const category = params.category as string;
   const formattedCategory = category.charAt(0).toUpperCase() + category.slice(1);
+  const { orders } = useAppData();
+  const filteredOrders = orders.filter(o => o.category === category);
 
   return (
     <div className="space-y-6">
@@ -49,7 +52,7 @@ export default function SupplierOrdersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800">
-              {MOCK_ORDERS.map((row) => (
+              {filteredOrders.map((row) => (
                 <tr key={row.id} className="hover:bg-gray-800/50 transition-colors">
                   <td className="px-6 py-4 text-gray-300">{row.game}</td>
                   <td className="px-6 py-4 text-gray-300">{row.product}</td>
