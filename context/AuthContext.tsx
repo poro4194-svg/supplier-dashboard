@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { User } from '@/types';
+import type { User } from '@/types';
 
 interface AuthContextType {
   user: User | null;
@@ -13,31 +13,63 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function normalizeUser(raw: any): User | null {
+  if (!raw || typeof raw !== 'object') return null;
+  if (typeof raw.username !== 'string') return null;
+  if (raw.role !== 'admin' && raw.role !== 'supplier') return null;
+
+  // Ako je supplier, a nema supplierId (stari storage), koristimo username kao supplierId.
+  // (Ovo je OK za sada jer ćeš ti napraviti logine tipa: ffin, sup2, sup3)
+  if (raw.role === 'supplier') {
+    return {
+      username: raw.username,
+      role: 'supplier',
+      supplierId: raw.supplierId ?? raw.username,
+    } as User;
+  }
+
+  // admin
+  return {
+    username: raw.username,
+    role: 'admin',
+  } as User;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
 
-  // 1. Load user from localStorage on mount
+  // 1) Load user from localStorage on mount (+ normalize)
   useEffect(() => {
     const initAuth = () => {
       try {
         const stored = localStorage.getItem('user');
         if (stored) {
-          setUser(JSON.parse(stored));
+          const parsed = JSON.parse(stored);
+          const normalized = normalizeUser(parsed);
+
+          if (normalized) {
+            // upiši nazad normalizovan user (da sledeći put bude čist)
+            localStorage.setItem('user', JSON.stringify(normalized));
+            setUser(normalized);
+          } else {
+            localStorage.removeItem('user');
+          }
         }
       } catch (error) {
-        console.error("Auth initialization error:", error);
+        console.error('Auth initialization error:', error);
         localStorage.removeItem('user');
       } finally {
         setIsLoading(false);
       }
     };
+
     initAuth();
   }, []);
 
-  // 2. Protect Routes
+  // 2) Protect Routes
   useEffect(() => {
     if (isLoading) return;
 
@@ -46,11 +78,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // CASE A: User is NOT logged in
     if (!user) {
-      // If they are on a protected page (not login), send them to login
-      if (!isAuthPage) {
-        router.replace('/login');
-      }
-      return; // Stop execution here
+      if (!isAuthPage) router.replace('/login');
+      return;
     }
 
     // CASE B: User IS logged in
@@ -58,15 +87,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const supplierHome = '/supplier/orders/account';
     const targetHome = user.role === 'admin' ? adminHome : supplierHome;
 
-    // 1. Redirect from Public pages (Login/Root) to Dashboard
+    // Redirect from Public pages (Login/Root) to Dashboard
     if (isAuthPage || isRootPage) {
-      // We don't need to check "if (pathname !== home)" because we know 
-      // pathname is currently '/login' or '/', so it definitely isn't home.
       router.replace(targetHome);
       return;
     }
 
-    // 2. Role-based Protection (prevent cross-role access)
+    // Role-based Protection
     if (user.role === 'admin' && pathname.startsWith('/supplier')) {
       router.replace(adminHome);
       return;
@@ -76,13 +103,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       router.replace(supplierHome);
       return;
     }
-
   }, [user, isLoading, pathname, router]);
 
   const login = (userData: User) => {
-    localStorage.setItem('user', JSON.stringify(userData));
-    setUser(userData);
-    router.replace(userData.role === 'admin' ? '/admin/offers/account' : '/supplier/orders/account');
+    // normalize i na login (da ne upadne supplier bez supplierId)
+    const normalized = normalizeUser(userData) ?? userData;
+
+    localStorage.setItem('user', JSON.stringify(normalized));
+    setUser(normalized);
+
+    router.replace(normalized.role === 'admin' ? '/admin/offers/account' : '/supplier/orders/account');
   };
 
   const logout = () => {

@@ -4,7 +4,15 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { LayoutDashboard, Package, ShoppingCart, LogOut, X, BarChart3 } from 'lucide-react';
+import {
+  LayoutDashboard,
+  Package,
+  ShoppingCart,
+  LogOut,
+  X,
+  BarChart3,
+  Wallet,
+} from 'lucide-react';
 import { Button } from './ui/Button';
 
 export const Sidebar = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
@@ -23,6 +31,19 @@ export const Sidebar = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
               { label: 'Account Offers', path: '/admin/offers/account' },
               { label: 'Item Offers', path: '/admin/offers/item' },
               { label: 'Currency Offers', path: '/admin/offers/currency' },
+            ],
+          },
+          {
+            label: 'Orders',
+            icon: ShoppingCart,
+            subItems: [{ label: 'All Orders', path: '/admin/orders' }],
+          },
+          {
+            label: 'Payments',
+            icon: Wallet,
+            subItems: [
+              { label: 'Balance', path: '/admin/payments/balance' },
+              { label: 'Payments', path: '/admin/payments/payments' },
             ],
           },
           {
