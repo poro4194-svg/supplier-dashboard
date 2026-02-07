@@ -44,11 +44,10 @@ function toDateInputValue(ts: number) {
 }
 
 /**
- * ✅ Converts createdAt into a number timestamp
- * supports:
- * - number (already timestamp)
- * - string (ISO date or something parseable by Date)
- * - undefined (returns null)
+ * ✅ createdAt normalizacija:
+ * - number (timestamp)
+ * - string (parseable)
+ * - undefined/null -> null
  */
 function toTs(createdAt: unknown): number | null {
   if (typeof createdAt === 'number' && Number.isFinite(createdAt)) return createdAt;
@@ -68,57 +67,53 @@ function inRange(ts: number, start: number, end: number) {
 export default function AdminAnalyticsPage() {
   const { offers, orders } = useAppData();
 
-  const now = Date.now();
-  const defaultEnd = endOfDay(now);
-  const defaultStart = startOfDay(now - 13 * 24 * 60 * 60 * 1000);
+  // ✅ purity fix: Date.now() samo u lazy init (ne u renderu)
+  const [nowTs] = useState<number>(() => Date.now());
+
+  const defaultEnd = endOfDay(nowTs);
+  const defaultStart = startOfDay(nowTs - 13 * 24 * 60 * 60 * 1000);
 
   const [rangeStart, setRangeStart] = useState<number>(defaultStart);
   const [rangeEnd, setRangeEnd] = useState<number>(defaultEnd);
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const last24hStart = now - 24 * 60 * 60 * 1000;
-  const last24hEnd = now;
+  const last24hStart = nowTs - 24 * 60 * 60 * 1000;
+  const last24hEnd = nowTs;
 
   const metrics24h = useMemo(() => {
     const orders24h = orders.filter((o: Order) => {
-      const ts = toTs((o as any).createdAt);
+      const ts = toTs(o.createdAt);
       return ts !== null && inRange(ts, last24hStart, last24hEnd);
     });
 
     const offers24h = offers.filter((o: Offer) => {
-      const ts = toTs((o as any).createdAt);
+      const ts = toTs(o.createdAt);
       return ts !== null && inRange(ts, last24hStart, last24hEnd);
     });
 
     const ordersCount = orders24h.length;
     const listedOffers = offers24h.length;
 
-    const profit = orders24h.reduce(
-      (sum, o) => sum + parseMoney(o.price) * (o.qty ?? 1),
-      0
-    );
+    const profit = orders24h.reduce((sum, o) => sum + parseMoney(o.price) * (o.qty ?? 1), 0);
 
     return { ordersCount, profit, listedOffers };
   }, [offers, orders, last24hStart, last24hEnd]);
 
   const metricsRange = useMemo(() => {
     const rOrders = orders.filter((o: Order) => {
-      const ts = toTs((o as any).createdAt);
+      const ts = toTs(o.createdAt);
       return ts !== null && inRange(ts, rangeStart, rangeEnd);
     });
 
     const rOffers = offers.filter((o: Offer) => {
-      const ts = toTs((o as any).createdAt);
+      const ts = toTs(o.createdAt);
       return ts !== null && inRange(ts, rangeStart, rangeEnd);
     });
 
     const ordersCount = rOrders.length;
     const listedOffers = rOffers.length;
 
-    const profit = rOrders.reduce(
-      (sum, o) => sum + parseMoney(o.price) * (o.qty ?? 1),
-      0
-    );
+    const profit = rOrders.reduce((sum, o) => sum + parseMoney(o.price) * (o.qty ?? 1), 0);
 
     return { ordersCount, profit, listedOffers };
   }, [offers, orders, rangeStart, rangeEnd]);
@@ -129,14 +124,11 @@ export default function AdminAnalyticsPage() {
     const prevEnd = rangeEnd - len;
 
     const prevOrders = orders.filter((o: Order) => {
-      const ts = toTs((o as any).createdAt);
+      const ts = toTs(o.createdAt);
       return ts !== null && inRange(ts, prevStart, prevEnd);
     });
 
-    const prevProfit = prevOrders.reduce(
-      (sum, o) => sum + parseMoney(o.price) * (o.qty ?? 1),
-      0
-    );
+    const prevProfit = prevOrders.reduce((sum, o) => sum + parseMoney(o.price) * (o.qty ?? 1), 0);
 
     const delta = metricsRange.profit - prevProfit;
     const pct = prevProfit > 0 ? (delta / prevProfit) * 100 : null;
@@ -160,7 +152,7 @@ export default function AdminAnalyticsPage() {
         <h1 className="text-3xl font-bold text-white">Good evening, Poro</h1>
 
         <div className="relative">
-          <Button variant="secondary" onClick={() => setPickerOpen((v) => !v)} className="gap-2">
+          <Button variant="secondary" onClick={() => setPickerOpen(v => !v)} className="gap-2">
             <Calendar className="w-4 h-4" />
             Select Date Range
             <span className="text-gray-300 ml-2">{rangeLabel}</span>

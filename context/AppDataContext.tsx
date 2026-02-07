@@ -42,6 +42,36 @@ const SEED_OFFER_GAMES = new Set(['Elden Ring', 'WoW', 'Diablo 4']);
 const SEED_ORDER_GAMES = new Set(['Lost Ark', 'PoE']);
 
 // -----------------------------
+// ✅ safe storage (SSR-safe)
+// -----------------------------
+function canUseStorage() {
+  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+}
+
+function safeGetItem(key: string): string | null {
+  if (!canUseStorage()) return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetItem(key: string, value: string) {
+  if (!canUseStorage()) return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {}
+}
+
+function safeRemoveItem(key: string) {
+  if (!canUseStorage()) return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {}
+}
+
+// -----------------------------
 // ✅ helpers (no "any")
 // -----------------------------
 function safeParse(raw: string | null): unknown {
@@ -162,9 +192,9 @@ function migrateOrder(raw: unknown): Order | null {
   // ✅ offerId fallback (stari storage)
   const offerId = toNumber(raw.offerId, Number.isFinite(id) ? id : Date.now());
 
-  // ✅ NEW: orderCost required
-  // - ako ga nema u storage-u, fallback: price (nije idealno, ali spašava app)
-  const orderCost = toString(raw.orderCost, price);
+  // ✅ orderCost required
+  // - ako ga nema u storage-u, fallback: "$0.00" (ne price, jer bi ubilo profit logiku)
+  const orderCost = toString(raw.orderCost, '$0.00');
 
   return {
     id,
@@ -182,8 +212,11 @@ function migrateOrder(raw: unknown): Order | null {
 }
 
 function loadInitialData(): { offers: Offer[]; orders: Order[] } {
-  const offersRaw = safeParse(localStorage.getItem(OFFERS_KEY));
-  const ordersRaw = safeParse(localStorage.getItem(ORDERS_KEY));
+  // ✅ SSR/build-safe: ako nema storage, vrati prazno
+  if (!canUseStorage()) return { offers: [], orders: [] };
+
+  const offersRaw = safeParse(safeGetItem(OFFERS_KEY));
+  const ordersRaw = safeParse(safeGetItem(ORDERS_KEY));
 
   const offerListUnknown = isArray(offersRaw) ? offersRaw : [];
   const orderListUnknown = isArray(ordersRaw) ? ordersRaw : [];
@@ -249,15 +282,16 @@ function loadInitialData(): { offers: Offer[]; orders: Order[] } {
 }
 
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
+  // ✅ init je sada SSR-safe
   const [{ offers, orders }, setData] = useState(() => loadInitialData());
 
-  // ✅ Persist whenever data changes (nema hydrated state, nema setState u effect)
+  // ✅ Persist whenever data changes (SSR-safe)
   useEffect(() => {
-    localStorage.setItem(OFFERS_KEY, JSON.stringify(offers));
+    safeSetItem(OFFERS_KEY, JSON.stringify(offers));
   }, [offers]);
 
   useEffect(() => {
-    localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+    safeSetItem(ORDERS_KEY, JSON.stringify(orders));
   }, [orders]);
 
   const addOffer = useCallback((offer: Omit<Offer, 'id' | 'createdAt'>) => {
@@ -307,8 +341,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const clearAll = useCallback(() => {
-    localStorage.removeItem(OFFERS_KEY);
-    localStorage.removeItem(ORDERS_KEY);
+    safeRemoveItem(OFFERS_KEY);
+    safeRemoveItem(ORDERS_KEY);
     setData({ offers: [], orders: [] });
   }, []);
 
